@@ -99,12 +99,12 @@ func (c *Controller) podsync(key string) error {
 	}
 
 	nodestatus := getnode.Status.Conditions[4].Status
-	if ok {
+	if ok && nodestatus == "True" {
 		podcurr1 := getpod.Status.ContainerStatuses[0].RestartCount
-		lastcount, ok := restartcount[key]
-		if !ok {
-			restartcount[key] = podcurr1
-		} else {
+		fmt.Println(podcurr1)
+		lastcount, ok2 := restartcount[key]
+		fmt.Println(lastcount)
+		if ok2 {
 			if podcurr1-lastcount >= count {
 				deploy, err := c.client.AppsV1().Deployments(namespace).Get(context.TODO(), deployname, v1.GetOptions{})
 				if err != nil && errors.IsNotFound(err) {
@@ -122,9 +122,13 @@ func (c *Controller) podsync(key string) error {
 				}
 				fmt.Printf("deploy %v 副本数已更新为0", deploy.Spec.Replicas)
 			}
+		} else if !ok2 {
+			restartcount[key] = podcurr1
+			fmt.Println(podcurr1)
 		}
 
 	} else if ok && nodestatus != "True" {
+
 		return nil
 	}
 	return nil
@@ -153,8 +157,8 @@ func (c *Controller) process() bool {
 	//标记拿到的项目已完成
 	defer c.queue.Done(item)
 	key := item.(string)
-	time.Sleep(1 * time.Minute)
 	err := c.podsync(key)
+	time.Sleep(1 * time.Minute)
 	if err != nil {
 		c.handlererror(key, err)
 	}
@@ -167,7 +171,8 @@ func (c *Controller) handlererror(key string, err error) {
 		c.queue.AddRateLimited(key)
 	}
 	runtime.HandleError(err)
-	c.queue.Done(key)
+	//c.queue.Done(key)
+	c.queue.Forget(key)
 }
 
 func Newcontroller(client *kubernetes.Clientset, podInformer podinformer.PodInformer) Controller {
